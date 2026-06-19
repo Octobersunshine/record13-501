@@ -35,6 +35,9 @@ func main() {
 	h := handler.New(db)
 	h.RegisterRoutes(r)
 
+	nh := handler.NewNotificationHandler(db)
+	nh.RegisterRoutes(r)
+
 	log.Println("server starting on :8080")
 	if err := r.Run(":8080"); err != nil {
 		log.Fatalf("failed to start server: %v", err)

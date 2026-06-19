@@ -57,5 +57,5 @@ func (Contract) TableName() string {
 }
 
 func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(&Contract{})
+	return db.AutoMigrate(&Contract{}, &Notification{})
 }
