@@ -42,6 +42,7 @@ type Contract struct {
 	Status        ContractStatus `gorm:"size:32;not null;default:draft" json:"status"`
 	RejectReason  string         `gorm:"type:text" json:"reject_reason,omitempty"`
 	SignURL       string         `gorm:"size:512" json:"sign_url,omitempty"`
+	SignatureImage string        `gorm:"size:512" json:"signature_image,omitempty"`
 	EffectiveDate *time.Time     `json:"effective_date,omitempty"`
 	ExpiryDate    *time.Time     `json:"expiry_date,omitempty"`
 	SignedAt      *time.Time     `json:"signed_at,omitempty"`

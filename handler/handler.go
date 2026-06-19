@@ -1,8 +1,12 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"econtract/model"
@@ -10,6 +14,22 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+const (
+	SignatureDir = "./signatures"
+	MaxFileSize  = 5 * 1024 * 1024
+)
+
+var allowedExts = map[string]bool{
+	".png":  true,
+	".jpg":  true,
+	".jpeg": true,
+	".gif":  true,
+}
+
+func init() {
+	os.MkdirAll(SignatureDir, 0755)
+}
 
 type Handler struct {
 	DB *gorm.DB
@@ -167,6 +187,34 @@ func canTransition(from, to model.ContractStatus) bool {
 	return false
 }
 
+func saveSignatureFile(c *gin.Context, contractID uint) (string, error) {
+	file, err := c.FormFile("signature_image")
+	if err != nil {
+		if err == http.ErrMissingFile {
+			return "", nil
+		}
+		return "", fmt.Errorf("读取签名文件失败: %v", err)
+	}
+
+	if file.Size > MaxFileSize {
+		return "", fmt.Errorf("签名文件大小超过限制 5MB")
+	}
+
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if !allowedExts[ext] {
+		return "", fmt.Errorf("不支持的文件格式，仅允许 png/jpg/jpeg/gif")
+	}
+
+	filename := fmt.Sprintf("contract_%d_%d%s", contractID, time.Now().UnixNano(), ext)
+	savePath := filepath.Join(SignatureDir, filename)
+
+	if err := c.SaveUploadedFile(file, savePath); err != nil {
+		return "", fmt.Errorf("保存签名文件失败: %v", err)
+	}
+
+	return fmt.Sprintf("/signatures/%s", filename), nil
+}
+
 func (h *Handler) UpdateStatus(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
@@ -175,8 +223,17 @@ func (h *Handler) UpdateStatus(c *gin.Context) {
 	}
 
 	var req UpdateStatusReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		fail(c, http.StatusBadRequest, "参数错误: "+err.Error())
+	contentType := c.ContentType()
+	if strings.Contains(contentType, "multipart/form-data") {
+		req.Status = model.ContractStatus(c.PostForm("status"))
+		req.RejectReason = c.PostForm("reject_reason")
+	} else if strings.Contains(contentType, "application/json") {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			fail(c, http.StatusBadRequest, "参数错误: "+err.Error())
+			return
+		}
+	} else {
+		fail(c, http.StatusBadRequest, "Content-Type 必须是 application/json 或 multipart/form-data")
 		return
 	}
 
@@ -199,6 +256,17 @@ func (h *Handler) UpdateStatus(c *gin.Context) {
 	now := time.Now()
 	updates := map[string]interface{}{
 		"status": req.Status,
+	}
+
+	if req.Status == model.StatusSigned {
+		sigPath, err := saveSignatureFile(c, uint(id))
+		if err != nil {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		if sigPath != "" {
+			updates["signature_image"] = sigPath
+		}
 	}
 
 	switch req.Status {

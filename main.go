@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"econtract/handler"
 	"econtract/model"
@@ -23,9 +24,13 @@ func initDB() *gorm.DB {
 }
 
 func main() {
+	os.MkdirAll(handler.SignatureDir, 0755)
+
 	db := initDB()
 
 	r := gin.Default()
+
+	r.Static("/signatures", handler.SignatureDir)
 
 	h := handler.New(db)
 	h.RegisterRoutes(r)
